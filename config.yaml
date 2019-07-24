@@ -9,19 +9,22 @@ general_options:
 
 # The following are parameters for filtering contours
 analysis_options:
+    # Whether or not to allow user to crop each image. All
+    # contours outside the crop zone will be rejected.
+    crop: False
     # If the average intensity of the pixels in the minimal
     # enclosing circle around the countour in the thresholded
     # image are above this threshold, it is rejected. This is
     # to avoid bright blobs which are artifacts, rather than
-    # hyphae
+    # actual hyphae.
     intensity_threshold: 128 
-    # The circularity of candidate hyphae is used to determine
+    # The circularity of candidate hyphae is used to determine if
     # it is a valid hyphae. If it is too circular, it is rejected.
-    # A perfect circle would be have a circularity of 1.0 and
-    # anything else would be less.
+    # A perfect circle would have a circularity of 1.0 and anything
+    # else would be less.
     min_circularity: 0.80
     # If the perimeter of the contour is less than this value
     # it will be rejected. This is used to remove noise which
-    # is too small. This value is in pixels.
+    # is too small. This value is in absolute pixels.
     min_perimeter: 50
 
