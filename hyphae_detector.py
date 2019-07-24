@@ -4,10 +4,13 @@ from os import path
 
 import cv2
 import matplotlib as mpl
-mpl.use('TkAgg')
 import numpy as np
+import yaml
 from matplotlib import pyplot as plt
 
+mpl.use('TkAgg')
+
+_DEFAULT_CONFIG_PATH = './config.yaml'
 _DEFAULT_DATA_DIR = './data/'
 _DEFAULT_SAVE_DIR = './output/'
 _DEFAULT_CROP_POLICY = True
@@ -16,14 +19,21 @@ _MIN_CIRCULARITY = 0.8
 _MIN_PERIMETER = 50
 
 
-def process_data(data_dir=_DEFAULT_DATA_DIR,
-                 save_dir=_DEFAULT_SAVE_DIR,
-                 crop=_DEFAULT_CROP_POLICY):
+def process_data():
+
+    args = _process_config()
+    general_args = args['general_options']
+    analysis_options = args['analysis_options']
+
     # Create save directory
+    # TODO(Anish): Probably change save_dir to output_dir
+    save_dir = general_args['output_dir']
     saved_image_dir = path.join(save_dir, 'images')
     os.makedirs(saved_image_dir, exist_ok=True)
 
     # Retrieve all images in the data directory
+    # TODO(Anish): Replace all prints with logging
+    data_dir = general_options['data_dir']
     print(data_dir)
 
     subdirs = [
@@ -34,7 +44,8 @@ def process_data(data_dir=_DEFAULT_DATA_DIR,
     for subdir in subdirs:
         subdir_path = path.join(data_dir, subdir)
         fnames = [
-            f for f in os.listdir(subdir_path) if path.isfile(path.join(subdir_path, f))
+            f for f in os.listdir(subdir_path)
+            if path.isfile(path.join(subdir_path, f))
         ]
         fnames.sort()
         areas, output_fnames = [], []
@@ -53,12 +64,15 @@ def process_data(data_dir=_DEFAULT_DATA_DIR,
 
             print("Processing {}...".format(fname))
             # Detect Microbial Structure
+            # TODO(Anish): Unpack args and pass to detect_hyphae_area
+            # from the analysis_args. Maybe also move crop to this
+            # region.
             area, feeding_structures = detect_hyphae_area(
                 image, crop=crop, save_dir=saved_image_dir)
             areas.append(area)
             output_fnames.append(fname)
             output_image_path = path.join(saved_image_dir,
-                                             _sanitize_name(str(fname)))
+                                          _sanitize_name(str(fname)))
             cv2.imwrite(output_image_path, feeding_structures)
 
         # Write output with format easy to copy paste
@@ -72,10 +86,12 @@ def process_data(data_dir=_DEFAULT_DATA_DIR,
             for area in areas:
                 f.write("{}\n".format(area))
 
+
 # TODO(Anish): remove this save_dir
-def detect_hyphae_area(img, crop=False, save_dir=None):
+def detect_hyphae_area(img, save_dir, crop, intensity_thres, min_circularity, min_perimeter):
     h, w = img.shape[:2]
     original_img = img.copy()
+    # TODO(Anish): Remove all the image saves
     cv2.imwrite(save_dir + '/original_img.jpg', img)
     if crop:
         crop_mask = crop_img(img)
@@ -84,7 +100,7 @@ def detect_hyphae_area(img, crop=False, save_dir=None):
             cropped_display_img[crop_mask] = 0
             cv_plot(img, "Cropped Image.")
             cv2.imwrite(save_dir + '/cropped_img.jpg', cropped_display_img)
-            
+
     gray = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY)
     cv2.imwrite(save_dir + '/gray_img.jpg', gray)
     blurred = cv2.bilateralFilter(gray, 9, 75, 75)
@@ -94,14 +110,18 @@ def detect_hyphae_area(img, crop=False, save_dir=None):
     cv2.imwrite(save_dir + '/adaptive_gaussian_threshold_img.jpg', thresh)
     im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST,
                                                 cv2.CHAIN_APPROX_SIMPLE)
+    intensity_thresh = analysis_args['intensity_threshold']
+    min_circularity = analysis_args['min_circularity']
+    min_perimeter= analysis_args['min_perimeter']
     filtered_contours = [
-        contour for contour in contours if valid_contour(contour, thresh)
+        contour for contour in contours if valid_contour(contour, thresh, intensity_thresh, min_circularity, min_perimeter_)
     ]
     print("Kept {} / {} contours.".format(
         len(filtered_contours), len(contours)))
     all_contour_img = img.copy()
     cv2.drawContours(all_contour_img, contours, -1, (0, 255, 0), 1)
-    cv2.imwrite(save_dir + '/all_{}_contour_img.jpg'.format(len(contours)), all_contour_img)
+    cv2.imwrite(save_dir + '/all_{}_contour_img.jpg'.format(len(contours)),
+                all_contour_img)
 
     feeding_structures = img.copy()
     mask = np.zeros(thresh.shape, np.uint8)
@@ -110,13 +130,14 @@ def detect_hyphae_area(img, crop=False, save_dir=None):
     cv2.drawContours(feeding_structures, filtered_contours, -1, (0, 255, 0), 1)
     if crop and crop_mask is not None:
         mask[crop_mask] = 0
-        feeding_structures[crop_mask] = original_img[crop_mask]        
+        feeding_structures[crop_mask] = original_img[crop_mask]
 
     _zero_border(feeding_structures)
     _zero_border(mask)
 
-
-    cv2.imwrite(save_dir + '/{}_filtered_contour_img.jpg'.format(len(filtered_contours)), feeding_structures)
+    cv2.imwrite(
+        save_dir + '/{}_filtered_contour_img.jpg'.format(
+            len(filtered_contours)), feeding_structures)
 
     area = 1 - (np.count_nonzero(mask) / mask.size)
     display_img = np.hstack([original_img, feeding_structures])
@@ -132,9 +153,9 @@ def _zero_border(img):
     return img
 
 
-def valid_contour(cnt, thresh):
+def valid_contour(cnt,thresh, intensity_thresh, min_circularity, min_perimeter):
     perimeter = cv2.arcLength(cnt, True)
-    if perimeter < _MIN_PERIMETER:
+    if perimeter < min_perimeter:
         return False
 
     area = cv2.contourArea(cnt)
@@ -145,16 +166,20 @@ def valid_contour(cnt, thresh):
     radius = int(radius)
     cv2.circle(mask, center, radius, 255, cv2.FILLED)
     pixelpoints = np.nonzero(mask)
+    # TODO(Anish): Should this be the thresholded or
+    # original image. Also, rename to more explicit
+    # name.
     pixel_intensities = thresh[pixelpoints].flatten()
     pixel_intensities.sort()
     pixel_intensities = pixel_intensities[::-1]
+    # TODO(Anish): maybe remove
     median_intensity = pixel_intensities[int(len(pixel_intensities) * 0.50)]
     mean_intensity = pixel_intensities.mean()
-    if median_intensity < _INTENSITY_THRESHOLD:
+    if mean_intensity < intensity_thresh:
         return False
 
     if _MIN_CIRCULARITY < circularity:
-        return False 
+        return False
 
     return True
 
@@ -196,6 +221,8 @@ def cv_plot(img, name, disp_time=1000, window_height=500, window_width=500):
 
 
 _ACCEPTABLE_NON_ALPHANUM = ('.', '_', '-', '/')
+
+
 def _sanitize_name(name):
     return "".join([
         c for c in name
@@ -203,6 +230,11 @@ def _sanitize_name(name):
     ]).rstrip()
 
 
+def _process_config():
+    with open(_DEFAULT_CONFIG_PATH) as fp:
+        args = yaml.load(fp)
+    return args
+
+
 if __name__ == "__main__":
     process_data()
-
