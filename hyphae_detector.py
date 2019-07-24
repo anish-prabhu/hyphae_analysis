@@ -1,7 +1,6 @@
 import math
 import os
-from os.path import isfile
-from os.path import join
+from os import path
 
 import cv2
 import matplotlib as mpl
@@ -11,18 +10,17 @@ from matplotlib import pyplot as plt
 
 _DEFAULT_DATA_DIR = './data/'
 _DEFAULT_SAVE_DIR = './output/'
-_DEFAULT_CROP_POLICY = False
+_DEFAULT_CROP_POLICY = True
 _INTENSITY_THRESHOLD = 128
-_MIN_CIRCULARITY, _MAX_CIRCULARITY = 0.8, 1.2
+_MIN_CIRCULARITY = 0.8
 _MIN_PERIMETER = 50
 
 
 def process_data(data_dir=_DEFAULT_DATA_DIR,
                  save_dir=_DEFAULT_SAVE_DIR,
-                 crop=_DEFAULT_CROP_POLICY,
-                 threshold=None):
+                 crop=_DEFAULT_CROP_POLICY):
     # Create save directory
-    saved_image_dir = os.path.join(save_dir, 'images')
+    saved_image_dir = path.join(save_dir, 'images')
     os.makedirs(saved_image_dir, exist_ok=True)
 
     # Retrieve all images in the data directory
@@ -30,13 +28,13 @@ def process_data(data_dir=_DEFAULT_DATA_DIR,
 
     subdirs = [
         x for x in os.listdir(data_dir)
-        if os.path.isdir(os.path.join(data_dir, x))
+        if os.path.isdir(path.join(data_dir, x))
     ]
     print(subdirs)
     for subdir in subdirs:
-        subdir_path = os.path.join(data_dir, subdir)
+        subdir_path = path.join(data_dir, subdir)
         fnames = [
-            f for f in os.listdir(subdir_path) if isfile(join(subdir_path, f))
+            f for f in os.listdir(subdir_path) if path.isfile(path.join(subdir_path, f))
         ]
         fnames.sort()
         areas, output_fnames = [], []
@@ -56,15 +54,15 @@ def process_data(data_dir=_DEFAULT_DATA_DIR,
             print("Processing {}...".format(fname))
             # Detect Microbial Structure
             area, feeding_structures = detect_hyphae_area(
-                image, crop=crop, threshold=threshold)
+                image, crop=crop, save_dir=saved_image_dir)
             areas.append(area)
             output_fnames.append(fname)
-            output_image_path = os.path.join(saved_image_dir,
+            output_image_path = path.join(saved_image_dir,
                                              _sanitize_name(str(fname)))
             cv2.imwrite(output_image_path, feeding_structures)
 
         # Write output with format easy to copy paste
-        output_path = os.path.join(save_dir, _sanitize_name(subdir) + ".txt")
+        output_path = path.join(save_dir, _sanitize_name(subdir) + ".txt")
         with open(output_path, "a") as f:
             f.write("File Names:\n\n")
             for fname in output_fnames:
@@ -74,18 +72,26 @@ def process_data(data_dir=_DEFAULT_DATA_DIR,
             for area in areas:
                 f.write("{}\n".format(area))
 
-
-def detect_hyphae_area(img, crop=False, threshold=None):
+# TODO(Anish): remove this save_dir
+def detect_hyphae_area(img, crop=False, save_dir=None):
+    h, w = img.shape[:2]
+    original_img = img.copy()
+    cv2.imwrite(save_dir + '/original_img.jpg', img)
     if crop:
         crop_mask = crop_img(img)
         if crop_mask is not None:
+            cropped_display_img = img.copy()
+            cropped_display_img[crop_mask] = 0
             cv_plot(img, "Cropped Image.")
-    h, w = img.shape[:2]
-    original_img = img.copy()
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            cv2.imwrite(save_dir + '/cropped_img.jpg', cropped_display_img)
+            
+    gray = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY)
+    cv2.imwrite(save_dir + '/gray_img.jpg', gray)
     blurred = cv2.bilateralFilter(gray, 9, 75, 75)
+    cv2.imwrite(save_dir + '/bilateral_filter_img.jpg', blurred)
     thresh = cv2.adaptiveThreshold(
         blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    cv2.imwrite(save_dir + '/adaptive_gaussian_threshold_img.jpg', thresh)
     im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST,
                                                 cv2.CHAIN_APPROX_SIMPLE)
     filtered_contours = [
@@ -93,15 +99,24 @@ def detect_hyphae_area(img, crop=False, threshold=None):
     ]
     print("Kept {} / {} contours.".format(
         len(filtered_contours), len(contours)))
+    all_contour_img = img.copy()
+    cv2.drawContours(all_contour_img, contours, -1, (0, 255, 0), 1)
+    cv2.imwrite(save_dir + '/all_{}_contour_img.jpg'.format(len(contours)), all_contour_img)
+
     feeding_structures = img.copy()
     mask = np.zeros(thresh.shape, np.uint8)
+
     cv2.drawContours(mask, filtered_contours, -1, 255, -1)
     cv2.drawContours(feeding_structures, filtered_contours, -1, (0, 255, 0), 1)
     if crop and crop_mask is not None:
-        feeding_structures[crop_mask] = original_img[crop_mask]
-    else:
-        _zero_border(feeding_structures)
-        _zero_border(mask)
+        mask[crop_mask] = 0
+        feeding_structures[crop_mask] = original_img[crop_mask]        
+
+    _zero_border(feeding_structures)
+    _zero_border(mask)
+
+
+    cv2.imwrite(save_dir + '/{}_filtered_contour_img.jpg'.format(len(filtered_contours)), feeding_structures)
 
     area = 1 - (np.count_nonzero(mask) / mask.size)
     display_img = np.hstack([original_img, feeding_structures])
@@ -137,12 +152,17 @@ def valid_contour(cnt, thresh):
     mean_intensity = pixel_intensities.mean()
     if median_intensity < _INTENSITY_THRESHOLD:
         return False
+
+    if _MIN_CIRCULARITY < circularity:
+        return False 
+
     return True
 
 
 def crop_img(img):
     h, w = img.shape[:2]
     pts = get_pts(img)
+    # TODO(Anish): should we be closing here?
     plt.close('all')
     if len(pts) < 1:
         return None

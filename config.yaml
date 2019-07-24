@@ -1,0 +1,27 @@
+# General options for the script
+general_options:
+    # Path to the data to process
+    data_dir: ./data
+    # Path to the folder to output results to
+    output_dir: ./output
+    # Whether or not to allow user to crop each image
+    crop: False
+
+# The following are parameters for filtering contours
+analysis_options:
+    # If the average intensity of the pixels in the minimal
+    # enclosing circle around the countour in the thresholded
+    # image are above this threshold, it is rejected. This is
+    # to avoid bright blobs which are artifacts, rather than
+    # hyphae
+    intensity_threshold: 128 
+    # The circularity of candidate hyphae is used to determine
+    # it is a valid hyphae. If it is too circular, it is rejected.
+    # A perfect circle would be have a circularity of 1.0 and
+    # anything else would be less.
+    min_circularity: 0.80
+    # If the perimeter of the contour is less than this value
+    # it will be rejected. This is used to remove noise which
+    # is too small. This value is in pixels.
+    min_perimeter: 50
+
