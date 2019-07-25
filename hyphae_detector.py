@@ -46,6 +46,7 @@ def process_data():
             if path.isfile(path.join(subdir_path, f))
         ]
         fnames.sort()
+        # TODO: Figure out best format for this.
         areas, output_fnames = [], []
         for fname in fnames:
             logging.info("\t\tProcessing image {}".format(fname))
@@ -71,9 +72,9 @@ def process_data():
                 image, save_dir, crop, intensity_thresh, min_circularity,
                 min_perimeter)
             areas.append(area)
-            output_fnames.append(fname)
+            output_fnames.append(img_path)
             output_image_path = path.join(saved_image_dir,
-                                          _sanitize_name(str(fname)))
+                                          _sanitize_name(img_path))
             cv2.imwrite(output_image_path, feeding_structures)
 
         # Write output with format easy to copy paste
@@ -93,8 +94,6 @@ def detect_hyphae_area(img, save_dir, crop, intensity_thresh, min_circularity,
                        min_perimeter):
     h, w = img.shape[:2]
     original_img = img.copy()
-    # TODO(Anish): Remove all the image saves
-    cv2.imwrite(save_dir + '/original_img.jpg', img)
     if crop:
         crop_mask = crop_img(img)
         if crop_mask is not None:
@@ -129,6 +128,8 @@ def detect_hyphae_area(img, save_dir, crop, intensity_thresh, min_circularity,
 
     _zero_border(feeding_structures)
     _zero_border(mask)
+
+    cv_plot(feeding_structures, "Detected hyphae.")
 
     area = 1 - (np.count_nonzero(mask) / mask.size)
     display_img = np.hstack([original_img, feeding_structures])

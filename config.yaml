@@ -4,8 +4,6 @@ general_options:
     data_dir: ./data
     # Path to the folder to output results to
     output_dir: ./output
-    # Whether or not to allow user to crop each image
-    crop: False
 
 # The following are parameters for filtering contours
 analysis_options:
