@@ -53,17 +53,12 @@ def process_data():
             # Retrieve the image
             img_path = path.join(subdir_path, fname)
             image = cv2.imread(img_path, 1)
-            # normalize image
-            image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX)
 
             # Ensure a valid image was read in
             if image is None:
                 continue
 
             # Detect Microbial Structure
-            # TODO(Anish): Unpack args and pass to detect_hyphae_area
-            # from the analysis_args. Maybe also move crop to this
-            # region.
             crop = analysis_args['crop']
             intensity_thresh = analysis_args['intensity_threshold']
             min_circularity = analysis_args['min_circularity']
@@ -89,7 +84,6 @@ def process_data():
                 f.write("{}\n".format(area))
 
 
-# TODO(Anish): remove this save_dir
 def detect_hyphae_area(img, save_dir, crop, intensity_thresh, min_circularity,
                        min_perimeter):
     h, w = img.shape[:2]
@@ -195,19 +189,23 @@ def get_pts(img, tout=-1, bgr=True):
     if bgr:
         img = img[..., ::-1]
 
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
     plt.imshow(img, cmap='gray')
     pts = np.array(plt.ginput(0, timeout=tout)).astype(int)
     plt.show()
     return pts
 
 
-def cv_plot(img, name, disp_time=1000, window_height=500, window_width=500):
+#TODO(Anish): add config option for display time
+def cv_plot(img, window_name, disp_time=1500):
     # Create cv2 window
-    cv2.namedWindow(name, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(name, window_height, window_width)
+    cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN,
+                          cv2.WINDOW_FULLSCREEN)
 
     # Show the image
-    cv2.imshow(name, img)
+    cv2.imshow(window_name, img)
     cv2.waitKey(disp_time)
     cv2.destroyAllWindows()
 

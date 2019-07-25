@@ -9,7 +9,7 @@ general_options:
 analysis_options:
     # Whether or not to allow user to crop each image. All
     # contours outside the crop zone will be rejected.
-    crop: False
+    crop: True
     # If the average intensity of the pixels in the minimal
     # enclosing circle around the countour in the thresholded
     # image are above this threshold, it is rejected. This is
