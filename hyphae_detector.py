@@ -12,38 +12,35 @@ from matplotlib import pyplot as plt
 logging.basicConfig()
 logging.root.setLevel(logging.INFO)
 
-mpl.use('TkAgg')
+mpl.use("TkAgg")
 
-_DEFAULT_CONFIG_PATH = './config.yaml'
+_DEFAULT_CONFIG_PATH = "./config.yaml"
 
 
 def process_data():
     args = _process_config()
-    general_args = args['general_options']
-    analysis_args = args['analysis_options']
+    general_args = args["general_options"]
+    analysis_args = args["analysis_options"]
 
     # Create save directory
     # TODO(Anish): Probably change save_dir to output_dir
-    save_dir = general_args['output_dir']
-    saved_image_dir = path.join(save_dir, 'images')
+    save_dir = general_args["output_dir"]
+    saved_image_dir = path.join(save_dir, "images")
     os.makedirs(saved_image_dir, exist_ok=True)
 
     # Retrieve all images in the data directory
-    data_dir = general_args['data_dir']
+    data_dir = general_args["data_dir"]
     if not path.isdir(data_dir):
         raise ValueError("Data directory {} does not exist.")
 
     logging.info("Processing data located {}".format(data_dir))
 
-    subdirs = [
-        x for x in os.listdir(data_dir) if path.isdir(path.join(data_dir, x))
-    ]
+    subdirs = [x for x in os.listdir(data_dir) if path.isdir(path.join(data_dir, x))]
     for subdir in subdirs:
         logging.info("\tProcessing images in {}".format(subdir))
         subdir_path = path.join(data_dir, subdir)
         fnames = [
-            f for f in os.listdir(subdir_path)
-            if path.isfile(path.join(subdir_path, f))
+            f for f in os.listdir(subdir_path) if path.isfile(path.join(subdir_path, f))
         ]
         fnames.sort()
         # TODO: Figure out best format for this.
@@ -59,17 +56,16 @@ def process_data():
                 continue
 
             # Detect Microbial Structure
-            crop = analysis_args['crop']
-            intensity_thresh = analysis_args['intensity_threshold']
-            min_circularity = analysis_args['min_circularity']
-            min_perimeter = analysis_args['min_perimeter']
+            crop = analysis_args["crop"]
+            intensity_thresh = analysis_args["intensity_threshold"]
+            min_circularity = analysis_args["min_circularity"]
+            min_perimeter = analysis_args["min_perimeter"]
             area, feeding_structures = detect_hyphae_area(
-                image, save_dir, crop, intensity_thresh, min_circularity,
-                min_perimeter)
+                image, save_dir, crop, intensity_thresh, min_circularity, min_perimeter
+            )
             areas.append(area)
             output_fnames.append(img_path)
-            output_image_path = path.join(saved_image_dir,
-                                          _sanitize_name(img_path))
+            output_image_path = path.join(saved_image_dir, _sanitize_name(img_path))
             cv2.imwrite(output_image_path, feeding_structures)
 
         # Write output with format easy to copy paste
@@ -84,8 +80,9 @@ def process_data():
                 f.write("{}\n".format(area))
 
 
-def detect_hyphae_area(img, save_dir, crop, intensity_thresh, min_circularity,
-                       min_perimeter):
+def detect_hyphae_area(
+    img, save_dir, crop, intensity_thresh, min_circularity, min_perimeter
+):
     h, w = img.shape[:2]
     original_img = img.copy()
     if crop:
@@ -99,15 +96,21 @@ def detect_hyphae_area(img, save_dir, crop, intensity_thresh, min_circularity,
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blurred = cv2.bilateralFilter(gray, 9, 75, 75)
     thresh = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-    im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST,
-                                                cv2.CHAIN_APPROX_SIMPLE)
+        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+    )
+    im2, contours, hierarchy = cv2.findContours(
+        thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE
+    )
     filtered_contours = [
-        contour for contour in contours if valid_contour(
-            contour, thresh, intensity_thresh, min_circularity, min_perimeter)
+        contour
+        for contour in contours
+        if valid_contour(
+            contour, thresh, intensity_thresh, min_circularity, min_perimeter
+        )
     ]
-    logging.info("\t\t\tKept {} / {} contours.".format(
-        len(filtered_contours), len(contours)))
+    logging.info(
+        "\t\t\tKept {} / {} contours.".format(len(filtered_contours), len(contours))
+    )
     all_contour_img = img.copy()
     cv2.drawContours(all_contour_img, contours, -1, (0, 255, 0), 1)
 
@@ -138,8 +141,7 @@ def _zero_border(img):
     return img
 
 
-def valid_contour(cnt, thresh, intensity_thresh, min_circularity,
-                  min_perimeter):
+def valid_contour(cnt, thresh, intensity_thresh, min_circularity, min_perimeter):
     perimeter = cv2.arcLength(cnt, True)
     if perimeter < min_perimeter:
         return False
@@ -174,7 +176,7 @@ def crop_img(img):
     h, w = img.shape[:2]
     pts = get_pts(img)
     # TODO(Anish): should we be closing here?
-    plt.close('all')
+    plt.close("all")
     if len(pts) < 1:
         return None
     mask = np.zeros((h, w))
@@ -191,18 +193,17 @@ def get_pts(img, tout=-1, bgr=True):
 
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
-    plt.imshow(img, cmap='gray')
+    plt.imshow(img, cmap="gray")
     pts = np.array(plt.ginput(0, timeout=tout)).astype(int)
     plt.show()
     return pts
 
 
-#TODO(Anish): add config option for display time
+# TODO(Anish): add config option for display time
 def cv_plot(img, window_name, disp_time=1500):
     # Create cv2 window
     cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
-    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN,
-                          cv2.WINDOW_FULLSCREEN)
+    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     # Show the image
     cv2.imshow(window_name, img)
@@ -210,14 +211,13 @@ def cv_plot(img, window_name, disp_time=1500):
     cv2.destroyAllWindows()
 
 
-_ACCEPTABLE_NON_ALPHANUM = ('.', '_', '-', '/')
+_ACCEPTABLE_NON_ALPHANUM = (".", "_", "-", "/")
 
 
 def _sanitize_name(name):
-    return "".join([
-        c for c in name
-        if c.isalpha() or c.isdigit() or c in _ACCEPTABLE_NON_ALPHANUM
-    ]).rstrip()
+    return "".join(
+        [c for c in name if c.isalpha() or c.isdigit() or c in _ACCEPTABLE_NON_ALPHANUM]
+    ).rstrip()
 
 
 def _process_config():
